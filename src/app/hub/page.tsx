@@ -1,5 +1,6 @@
 'use client';
 import { supabase } from '@/lib/supabase';
+import { isAdmin } from '@/lib/admin';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -20,6 +21,7 @@ import {
   User,
   RefreshCw,
   Upload,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import AuthModal from '@/components/AuthModal';
@@ -595,7 +597,21 @@ export default function HubPage() {
           </button>
 
           {isLoggedIn && user ? (
-            <div className="relative" ref={dropdownRef}>
+            <div className="relative flex items-center space-x-2" ref={dropdownRef}>
+                           {/* Admin shield badge — beside the avatar, clickable */}
+              {isAdmin(user) && (
+                <button
+                  onClick={() => {
+                    setIsAvatarDropdownOpen(false);
+                    router.push('/admin');
+                  }}
+                  className="flex items-center justify-center w-7 h-7 rounded-full bg-red-100 border border-red-300 shadow-xs hover:bg-red-200 hover:border-red-400 hover:scale-110 transition cursor-pointer"
+                  title="Open Admin Panel"
+                  aria-label="Open Admin Panel"
+                >
+                  <ShieldAlert className="w-4 h-4 text-red-600" strokeWidth={2} />
+                </button>
+              )}
               <button
                 id="avatar-btn"
                 onClick={() => setIsAvatarDropdownOpen((o) => !o)}
@@ -632,6 +648,20 @@ export default function HubPage() {
                       <Upload className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
                       <span>My Uploads</span>
                     </button>
+
+                    {isAdmin(user) && (
+                      <button
+                        onClick={() => {
+                          setIsAvatarDropdownOpen(false);
+                          router.push('/admin');
+                        }}
+                        className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition text-left"
+                      >
+                        <ShieldAlert className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        <span>Admin Panel</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={handleSwitchAccount}
                       className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition text-left"
