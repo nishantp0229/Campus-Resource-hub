@@ -1,5 +1,5 @@
 'use client';
-
+import { supabase } from '@/lib/supabase';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -47,7 +47,7 @@ export interface AcademicResource {
 }
 
 // ---------------------------------------------------------------------------
-// Mock data
+// Mock data (fallback when DB is empty/unreachable)
 // ---------------------------------------------------------------------------
 
 const MOCK_RESOURCES: AcademicResource[] = [
@@ -299,7 +299,8 @@ export default function HubPage() {
   const { isLoggedIn, user, logout, switchAccount } = useAuth();
 
   // Resources state
-  const [resources, setResources] = useState<AcademicResource[]>(MOCK_RESOURCES);
+  const [resources, setResources] = useState<AcademicResource[]>([]);
+  const [isLoadingResources, setIsLoadingResources] = useState(true);
 
   // Filter states
   const [search, setSearch] = useState('');
@@ -319,6 +320,17 @@ export default function HubPage() {
   const [isAvatarDropdownOpen, setIsAvatarDropdownOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
+  // Upload form state
+  const [uploadForm, setUploadForm] = useState({
+    title: '',
+    subject: '',
+    department: 'CSE' as Department,
+    semester: 1,
+    resource_type: 'Notes' as AcademicResource['resource_type'],
+  });
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
   // Dropdown ref for click-outside
   const dropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -329,6 +341,33 @@ export default function HubPage() {
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Fetch resources from Supabase on mount
+  useEffect(() => {
+    const fetchResources = async () => {
+      setIsLoadingResources(true);
+      try {
+        const { data, error } = await supabase
+          .from('resources')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('[Hub] Failed to load resources from Supabase:', error);
+          setResources(MOCK_RESOURCES);
+        } else {
+          setResources(data && data.length > 0 ? data : MOCK_RESOURCES);
+        }
+      } catch (err) {
+        console.error('[Hub] Unexpected error fetching resources:', err);
+        setResources(MOCK_RESOURCES);
+      } finally {
+        setIsLoadingResources(false);
+      }
+    };
+
+    fetchResources();
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -387,6 +426,95 @@ export default function HubPage() {
     setSearch('');
   };
 
+  /** Real upload handler: Storage + DB insert */
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile) {
+      alert('Please select a file.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // 1. Determine file format
+      const ext = (uploadFile.name.split('.').pop() ?? 'PDF').toUpperCase();
+      const fileFormat: AcademicResource['file_format'] =
+        ext === 'DOCX' ? 'DOCX' : ext === 'PDF' ? 'PDF' : 'PDF';
+
+      // 2. Upload to Supabase Storage
+      const filePath = `${Date.now()}-${uploadFile.name.replace(/\s+/g, '_')}`;
+      console.log('[Upload] Uploading to storage:', filePath);
+
+      const { error: uploadError } = await supabase.storage
+        .from('resource-files')
+        .upload(filePath, uploadFile, { upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      // 3. Get public URL
+      const { data: urlData } = supabase.storage
+        .from('resource-files')
+        .getPublicUrl(filePath);
+
+      const fileUrl = urlData.publicUrl;
+      console.log('[Upload] File uploaded. Public URL:', fileUrl);
+
+      // 4. Insert metadata row into resources table
+      const { data: inserted, error: dbError } = await supabase
+        .from('resources')
+        .insert([
+          {
+            title: uploadForm.title,
+            subject: uploadForm.subject,
+            department: uploadForm.department,
+            semester: uploadForm.semester,
+            resource_type: uploadForm.resource_type,
+            file_format: fileFormat,
+            file_size: `${(uploadFile.size / 1024 / 1024).toFixed(1)} MB`,
+            author: user?.userName ?? 'Anonymous',
+            time_ago: 'Just now',
+            upvotes: 0,
+            download_count: 0,
+            file_url: fileUrl,
+            description: '',
+          },
+        ])
+        .select()
+        .single();
+
+      if (dbError) throw dbError;
+
+      console.log('[Upload] DB row inserted:', inserted);
+
+      // 5. Prepend to state for instant UI update
+      setResources((prev) => [inserted as AcademicResource, ...prev]);
+
+      // 6. Reset & close
+      setUploadForm({
+        title: '',
+        subject: '',
+        department: 'CSE',
+        semester: 1,
+        resource_type: 'Notes',
+      });
+      setUploadFile(null);
+      setIsUploadOpen(false);
+      alert('Resource uploaded successfully!');
+    } catch (err: any) {
+      console.error('=== UPLOAD FAILED ===');
+      console.error('Raw error:', err);
+      console.error('Message:', err?.message);
+      console.error('Code:', err?.code);
+      console.error('Status:', err?.status || err?.statusCode);
+      console.error('Details:', err?.details);
+      console.error('Hint:', err?.hint);
+      console.error('======================');
+      alert(`Upload failed: ${err?.message ?? err?.error_description ?? JSON.stringify(err)}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // ---------------------------------------------------------------------------
   // Derived state
   // ---------------------------------------------------------------------------
@@ -434,11 +562,8 @@ export default function HubPage() {
   return (
     <div className="min-h-screen bg-[#F4F7FB] text-slate-800 flex flex-col font-sans">
 
-      {/* ------------------------------------------------------------------ */}
-      {/* HEADER                                                              */}
-      {/* ------------------------------------------------------------------ */}
+      {/* HEADER */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 h-16 px-4 sm:px-8 flex items-center justify-between shadow-xs">
-        {/* Logo */}
         <div className="flex items-center space-x-3">
           <button onClick={() => router.push('/')} className="flex items-center space-x-2 hover:opacity-80 transition">
             <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
@@ -451,9 +576,7 @@ export default function HubPage() {
           </span>
         </div>
 
-        {/* Header right */}
         <div className="flex items-center space-x-3">
-          {/* Mobile filter toggle */}
           <button
             onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
             className="md:hidden flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition"
@@ -462,7 +585,6 @@ export default function HubPage() {
             <span>Filters</span>
           </button>
 
-          {/* Upload button */}
           <button
             id="upload-resource-btn"
             onClick={handleUploadClick}
@@ -472,7 +594,6 @@ export default function HubPage() {
             <span>Upload Resource</span>
           </button>
 
-          {/* Account area */}
           {isLoggedIn && user ? (
             <div className="relative" ref={dropdownRef}>
               <button
@@ -484,10 +605,8 @@ export default function HubPage() {
                 <AvatarInitials name={user.userName} />
               </button>
 
-              {/* Dropdown */}
               {isAvatarDropdownOpen && (
                 <div className="absolute right-0 top-10 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                  {/* User info */}
                   <div className="px-4 py-3 border-b border-slate-100">
                     <p className="text-xs font-semibold text-slate-800 truncate">
                       {user.userName}
@@ -497,7 +616,6 @@ export default function HubPage() {
                     </p>
                   </div>
 
-                  {/* Menu items */}
                   <div className="py-1">
                     <button
                       onClick={() => { setShowBookmarkedOnly(true); setIsAvatarDropdownOpen(false); }}
@@ -547,19 +665,15 @@ export default function HubPage() {
         </div>
       </header>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* MAIN LAYOUT                                                         */}
-      {/* ------------------------------------------------------------------ */}
+      {/* MAIN LAYOUT */}
       <div className="flex-1 flex max-w-full">
 
-        {/* SIDEBAR */}
         <aside
           className={`${
             isMobileSidebarOpen ? 'fixed inset-y-16 left-0 z-30 shadow-lg' : 'hidden'
           } md:flex flex-col w-64 shrink-0 bg-white border-r border-slate-200 p-5 h-[calc(100vh-4rem)] sticky top-16 overflow-y-auto`}
         >
           <div className="space-y-6">
-            {/* My Favorites */}
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 px-1">
                 Library
@@ -586,7 +700,6 @@ export default function HubPage() {
               </button>
             </div>
 
-            {/* Department filter */}
             <div>
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
@@ -637,7 +750,6 @@ export default function HubPage() {
               </div>
             </div>
 
-            {/* Semester filter */}
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 px-1">
                 Semester
@@ -669,7 +781,6 @@ export default function HubPage() {
               </div>
             </div>
 
-            {/* Resource type filter */}
             <div>
               <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 px-1">
                 Resource Type
@@ -707,7 +818,6 @@ export default function HubPage() {
               </div>
             </div>
 
-            {/* Reset */}
             {isFiltered && (
               <div className="pt-2 border-t border-slate-200">
                 <button
@@ -722,11 +832,8 @@ export default function HubPage() {
           </div>
         </aside>
 
-        {/* MAIN CONTENT */}
         <main className="flex-1 p-6 sm:p-8 max-w-7xl">
-          {/* Toolbar */}
           <div className="sticky top-16 z-20 bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-            {/* Search */}
             <div className="relative w-full sm:flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" strokeWidth={1.5} />
               <input
@@ -747,7 +854,6 @@ export default function HubPage() {
               )}
             </div>
 
-            {/* Sort & count */}
             <div className="flex items-center space-x-4 w-full sm:w-auto justify-between sm:justify-end">
               <span className="text-xs text-slate-500 whitespace-nowrap">
                 Showing <strong className="text-slate-800 font-semibold">{filteredResources.length}</strong> resources
@@ -769,7 +875,6 @@ export default function HubPage() {
             </div>
           </div>
 
-          {/* Active filter chips */}
           {isFiltered && (
             <div className="flex flex-wrap items-center gap-2 mb-5 text-xs text-slate-600">
               <span className="text-xs text-slate-400 font-medium">Active filters:</span>
@@ -812,8 +917,15 @@ export default function HubPage() {
             </div>
           )}
 
-          {/* Resource grid */}
-          {filteredResources.length === 0 ? (
+          {isLoadingResources ? (
+            <div className="bg-white border border-slate-200 rounded-2xl p-14 text-center shadow-xs">
+              <RefreshCw className="w-10 h-10 text-blue-400 mx-auto mb-3 animate-spin" strokeWidth={1.5} />
+              <h3 className="text-base font-semibold text-slate-800">Loading resources…</h3>
+              <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
+                Fetching the latest study materials from the cooperative hub.
+              </p>
+            </div>
+          ) : filteredResources.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-14 text-center shadow-xs">
               <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" strokeWidth={1.5} />
               <h3 className="text-base font-semibold text-slate-800">No matching resources found</h3>
@@ -840,9 +952,7 @@ export default function HubPage() {
                     id={`resource-card-${item.id}`}
                     className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 flex flex-col justify-between space-y-4"
                   >
-                    {/* Top */}
                     <div className="space-y-3">
-                      {/* Chips + bookmark */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-md border ${getDepartmentChip(item.department)}`}>
@@ -870,7 +980,6 @@ export default function HubPage() {
                         </button>
                       </div>
 
-                      {/* Title */}
                       <div>
                         <h3
                           className="text-base font-semibold text-slate-800 leading-snug line-clamp-2 hover:text-blue-600 transition-colors"
@@ -881,7 +990,6 @@ export default function HubPage() {
                         <p className="text-xs font-medium text-slate-500 mt-1">{item.subject}</p>
                       </div>
 
-                      {/* Description */}
                       {item.description && (
                         <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
                           {item.description}
@@ -889,9 +997,7 @@ export default function HubPage() {
                       )}
                     </div>
 
-                    {/* Bottom */}
                     <div className="space-y-4 pt-4 border-t border-slate-100">
-                      {/* Metadata */}
                       <div className="text-xs text-slate-500 flex items-center flex-wrap gap-x-2">
                         <span className="truncate max-w-[130px] font-medium text-slate-700" title={item.author}>
                           {item.author}
@@ -902,9 +1008,7 @@ export default function HubPage() {
                         <span>{item.file_size}</span>
                       </div>
 
-                      {/* Footer actions */}
                       <div className="flex justify-between items-center pt-1">
-                        {/* Upvote/Downvote */}
                         <div className="inline-flex items-center bg-slate-50 border border-slate-200 rounded-lg px-1.5 py-1 space-x-1 shadow-2xs">
                           <button
                             onClick={() => handleVote(item.id, 'up')}
@@ -931,7 +1035,6 @@ export default function HubPage() {
                           </button>
                         </div>
 
-                        {/* Action buttons */}
                         <div className="flex items-center space-x-2">
                           {isPDF && (
                             <button
@@ -968,15 +1071,14 @@ export default function HubPage() {
         </main>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* UPLOAD MODAL                                                        */}
-      {/* ------------------------------------------------------------------ */}
+      {/* UPLOAD MODAL */}
       {isUploadOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-2xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-xl w-full max-w-md p-6 shadow-xl relative">
             <button
               onClick={() => setIsUploadOpen(false)}
-              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition"
+              disabled={isUploading}
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition disabled:opacity-50"
               aria-label="Close modal"
             >
               <X className="w-4 h-4" strokeWidth={1.5} />
@@ -992,19 +1094,14 @@ export default function HubPage() {
               </div>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                setIsUploadOpen(false);
-                alert('Mock upload simulated. File metadata saved.');
-              }}
-              className="space-y-4"
-            >
+            <form onSubmit={handleUploadSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-800 mb-1">Title</label>
                 <input
                   required
                   type="text"
+                  value={uploadForm.title}
+                  onChange={(e) => setUploadForm({ ...uploadForm, title: e.target.value })}
                   placeholder="e.g., Computer Networks Midterm Review"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
                 />
@@ -1014,6 +1111,8 @@ export default function HubPage() {
                 <input
                   required
                   type="text"
+                  value={uploadForm.subject}
+                  onChange={(e) => setUploadForm({ ...uploadForm, subject: e.target.value })}
                   placeholder="e.g., Computer Networks (CS401)"
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
                 />
@@ -1021,20 +1120,37 @@ export default function HubPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-800 mb-1">Department</label>
-                  <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 cursor-pointer">
+                  <select
+                    value={uploadForm.department}
+                    onChange={(e) => setUploadForm({ ...uploadForm, department: e.target.value as Department })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 cursor-pointer"
+                  >
                     {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-800 mb-1">Semester</label>
-                  <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 cursor-pointer">
+                  <select
+                    value={uploadForm.semester}
+                    onChange={(e) => setUploadForm({ ...uploadForm, semester: Number(e.target.value) })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 cursor-pointer"
+                  >
                     {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => <option key={s} value={s}>Semester {s}</option>)}
                   </select>
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-800 mb-1">Type</label>
-                <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 cursor-pointer">
+                <select
+                  value={uploadForm.resource_type}
+                  onChange={(e) =>
+                    setUploadForm({
+                      ...uploadForm,
+                      resource_type: e.target.value as AcademicResource['resource_type'],
+                    })
+                  }
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 cursor-pointer"
+                >
                   {RESOURCE_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
@@ -1044,6 +1160,7 @@ export default function HubPage() {
                   required
                   type="file"
                   accept=".pdf,.doc,.docx,.txt,.ppt,.pptx,.zip"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                   className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">Accepted: PDF, DOC, DOCX, TXT, PPT, PPTX, ZIP</p>
@@ -1052,15 +1169,17 @@ export default function HubPage() {
                 <button
                   type="button"
                   onClick={() => setIsUploadOpen(false)}
-                  className="px-3.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-slate-200 transition"
+                  disabled={isUploading}
+                  className="px-3.5 py-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 border border-slate-200 transition disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition"
+                  disabled={isUploading}
+                  className="px-4 py-2 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Upload File
+                  {isUploading ? 'Uploading…' : 'Upload File'}
                 </button>
               </div>
             </form>
@@ -1068,7 +1187,6 @@ export default function HubPage() {
         </div>
       )}
 
-      {/* Auth modal — triggered when logged-out user tries to upload */}
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
