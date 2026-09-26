@@ -357,7 +357,7 @@ export default function HubPage() {
             <span className="font-semibold text-sm tracking-tight text-slate-800">CampusHub</span>
           </button>
           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-            v2.0
+            v1.0
           </span>
         </div>
 
