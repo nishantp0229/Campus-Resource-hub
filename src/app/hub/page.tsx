@@ -34,7 +34,7 @@ export interface AcademicResource {
   id: string;
   title: string;
   subject: string;
-  department: 'CSE' | 'ECE' | 'EEE' | 'MECH' | 'CIVIL' | 'OTHER';
+  department: 'CSE' | 'CCE' | 'ECE' | 'CSE-QC' | 'CSE-AI' | 'CSE-AIDS';
   semester: number;
   resource_type: 'Notes' | 'PYQ' | 'Lab Manual' | 'Link';
   file_format: 'PDF' | 'DOCX' | 'LINK';
@@ -49,229 +49,12 @@ export interface AcademicResource {
 }
 
 // ---------------------------------------------------------------------------
-// Mock data (fallback when DB is empty/unreachable)
+// Mock data (empty — DB is the single source of truth)
 // ---------------------------------------------------------------------------
 
-const MOCK_RESOURCES: AcademicResource[] = [
-  {
-    id: 'res-1',
-    title: 'Data Structures & Algorithms: Comprehensive Midterm Notes',
-    subject: 'Data Structures (CS201)',
-    department: 'CSE',
-    semester: 3,
-    resource_type: 'Notes',
-    file_format: 'PDF',
-    file_size: '4.8 MB',
-    author: 'Prof. Arvind Sharma',
-    time_ago: '2 days ago',
-    upvotes: 42,
-    download_count: 128,
-    file_url: 'https://example.com/dsa-notes.pdf',
-    description:
-      'Covers balanced trees, graphs, dynamic programming patterns, and asymptotic complexity proofs.',
-    created_at: '2026-09-24T10:00:00Z',
-  },
-  {
-    id: 'res-2',
-    title: 'Calculus II (MATH201) Past End-Term Examination & Solutions',
-    subject: 'Advanced Engineering Math',
-    department: 'OTHER',
-    semester: 2,
-    resource_type: 'PYQ',
-    file_format: 'PDF',
-    file_size: '1.9 MB',
-    author: 'Math Dept Archive',
-    time_ago: '4 days ago',
-    upvotes: 35,
-    download_count: 215,
-    file_url: 'https://example.com/calculus-pastpaper.pdf',
-    description:
-      'Complete 2023-2025 question papers with handwritten step-by-step integral calculus solutions.',
-    created_at: '2026-09-22T08:30:00Z',
-  },
-  {
-    id: 'res-3',
-    title: 'Digital Signal Processing Simulation & MATLAB Lab Manual',
-    subject: 'DSP Systems (EC502)',
-    department: 'ECE',
-    semester: 5,
-    resource_type: 'Lab Manual',
-    file_format: 'PDF',
-    file_size: '8.2 MB',
-    author: 'Lab Instructor Rao',
-    time_ago: '1 week ago',
-    upvotes: 19,
-    download_count: 84,
-    file_url: 'https://example.com/dsp-lab-manual.pdf',
-    description:
-      'Experiments 1 through 10 covering FFT implementation, Butterworth filter design, and spectral analysis.',
-    created_at: '2026-09-18T14:20:00Z',
-  },
-  {
-    id: 'res-4',
-    title: 'Operating Systems: Virtual Memory & Concurrency Guide',
-    subject: 'Operating Systems (CS304)',
-    department: 'CSE',
-    semester: 4,
-    resource_type: 'Notes',
-    file_format: 'PDF',
-    file_size: '3.6 MB',
-    author: 'T.A. Priya Menon',
-    time_ago: '3 days ago',
-    upvotes: 56,
-    download_count: 172,
-    file_url: 'https://example.com/os-guide.pdf',
-    description:
-      'Detailed breakdowns of Peterson algorithm, semaphores, paging tables, and TLB miss simulations.',
-    created_at: '2026-09-23T11:45:00Z',
-  },
-  {
-    id: 'res-5',
-    title: 'Microprocessors & 8086 Assembly Language Quick Reference',
-    subject: 'Computer Architecture (EC403)',
-    department: 'ECE',
-    semester: 4,
-    resource_type: 'Notes',
-    file_format: 'PDF',
-    file_size: '2.1 MB',
-    author: 'Devendra K.',
-    time_ago: '5 days ago',
-    upvotes: 27,
-    download_count: 98,
-    file_url: 'https://example.com/8086-reference.pdf',
-    description:
-      'Register layout diagram, opcodes cheat sheet, and interrupt vector tables.',
-    created_at: '2026-09-21T09:15:00Z',
-  },
-  {
-    id: 'res-6',
-    title: 'Fluid Mechanics & Hydraulic Machines 4-Year PYQ Bank',
-    subject: 'Fluid Dynamics (ME302)',
-    department: 'MECH',
-    semester: 4,
-    resource_type: 'PYQ',
-    file_format: 'PDF',
-    file_size: '5.7 MB',
-    author: 'Mech Academic Committee',
-    time_ago: '2 weeks ago',
-    upvotes: 18,
-    download_count: 67,
-    file_url: 'https://example.com/fluid-mechanics-pyq.pdf',
-    description:
-      'Compiled university semester question papers with marked weightage analysis and boundary layer problems.',
-    created_at: '2026-09-12T16:00:00Z',
-  },
-  {
-    id: 'res-7',
-    title: 'Electrical Machines-I Laboratory Protocols & Graph Templates',
-    subject: 'Power Systems & Machinery (EE301)',
-    department: 'EEE',
-    semester: 3,
-    resource_type: 'Lab Manual',
-    file_format: 'PDF',
-    file_size: '6.4 MB',
-    author: 'Dr. K. Nambiar',
-    time_ago: '6 days ago',
-    upvotes: 24,
-    download_count: 110,
-    file_url: 'https://example.com/ee-machines-manual.pdf',
-    description:
-      'Load characteristics tests for DC shunt motors and single-phase transformers.',
-    created_at: '2026-09-20T13:00:00Z',
-  },
-  {
-    id: 'res-8',
-    title: 'Structural Analysis & Reinforced Concrete Design Notes',
-    subject: 'Structural Engineering (CE501)',
-    department: 'CIVIL',
-    semester: 5,
-    resource_type: 'Notes',
-    file_format: 'PDF',
-    file_size: '7.1 MB',
-    author: 'Civil Faculty Board',
-    time_ago: '1 week ago',
-    upvotes: 22,
-    download_count: 76,
-    file_url: 'https://example.com/structural-analysis.pdf',
-    description:
-      'Moment distribution method, shear force bending moment envelopes, and limit state principles.',
-    created_at: '2026-09-17T15:30:00Z',
-  },
-  {
-    id: 'res-9',
-    title: 'Interactive Algorithm Visualizer & Visual Proofs Portal',
-    subject: 'Computer Science Core',
-    department: 'CSE',
-    semester: 3,
-    resource_type: 'Link',
-    file_format: 'LINK',
-    file_size: 'Web Tool',
-    author: 'Campus Open Source Guild',
-    time_ago: '1 day ago',
-    upvotes: 68,
-    download_count: 340,
-    file_url: 'https://visualgo.net',
-    description:
-      'Community-recommended interactive sandbox for pathfinding, sorting, and red-black tree operations.',
-    created_at: '2026-09-25T14:10:00Z',
-  },
-  {
-    id: 'res-10',
-    title: 'Control Systems Engineering Formula & Stability Matrix',
-    subject: 'Control Systems (EE503)',
-    department: 'EEE',
-    semester: 5,
-    resource_type: 'Notes',
-    file_format: 'PDF',
-    file_size: '1.2 MB',
-    author: 'S. Varma',
-    time_ago: '3 weeks ago',
-    upvotes: 31,
-    download_count: 145,
-    file_url: 'https://example.com/control-systems-cheat-sheet.pdf',
-    description:
-      'Routh-Hurwitz criterion, Root Locus plotting rules, Nyquist stability, and Bode plot guidelines.',
-    created_at: '2026-09-05T12:00:00Z',
-  },
-  {
-    id: 'res-11',
-    title: 'Thermodynamics End-Term Exam Paper with Model Answers',
-    subject: 'Thermodynamics (ME301)',
-    department: 'MECH',
-    semester: 3,
-    resource_type: 'PYQ',
-    file_format: 'PDF',
-    file_size: '3.4 MB',
-    author: 'Central Exam Vault',
-    time_ago: '2 weeks ago',
-    upvotes: 25,
-    download_count: 88,
-    file_url: 'https://example.com/thermo-exam.pdf',
-    description:
-      'Complete solutions for Rankine cycle, Otto cycle, and refrigeration psychrometric calculations.',
-    created_at: '2026-09-10T10:00:00Z',
-  },
-  {
-    id: 'res-12',
-    title: 'Surveying & Geomatics Field Practical Observations Manual',
-    subject: 'Geomatics Engineering (CE304)',
-    department: 'CIVIL',
-    semester: 3,
-    resource_type: 'Lab Manual',
-    file_format: 'PDF',
-    file_size: '4.5 MB',
-    author: 'Surveying Lab Tech',
-    time_ago: '1 month ago',
-    upvotes: 14,
-    download_count: 53,
-    file_url: 'https://example.com/surveying-manual.pdf',
-    description:
-      'Theodolite traverse calculation sheets, leveling reductions, and total station fieldwork protocols.',
-    created_at: '2026-08-28T09:00:00Z',
-  },
-];
+const MOCK_RESOURCES: AcademicResource[] = [];
 
-const DEPARTMENTS = ['CSE', 'ECE', 'EEE', 'MECH', 'CIVIL', 'OTHER'] as const;
+const DEPARTMENTS = ['CSE', 'CCE', 'ECE', 'CSE-QC', 'CSE-AI', 'CSE-AIDS'] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 const RESOURCE_TYPES = ['Notes', 'PYQ', 'Lab Manual', 'Link'] as const;
 
@@ -312,7 +95,7 @@ export default function HubPage() {
   const [sortBy, setSortBy] = useState<'newest' | 'popular'>('newest');
 
   // Bookmark & vote tracking
-  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>(['res-1', 'res-4']);
+  const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
   const [userVotes, setUserVotes] = useState<Record<string, 'up' | 'down'>>({});
   const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
 
@@ -357,13 +140,13 @@ export default function HubPage() {
 
         if (error) {
           console.error('[Hub] Failed to load resources from Supabase:', error);
-          setResources(MOCK_RESOURCES);
+          setResources([]);
         } else {
-          setResources(data && data.length > 0 ? data : MOCK_RESOURCES);
+          setResources(data || []);
         }
       } catch (err) {
         console.error('[Hub] Unexpected error fetching resources:', err);
-        setResources(MOCK_RESOURCES);
+        setResources([]);
       } finally {
         setIsLoadingResources(false);
       }
@@ -550,7 +333,7 @@ export default function HubPage() {
 
   const getDepartmentChip = (dept: string) => {
     switch (dept) {
-      case 'CSE': case 'ECE': case 'EEE': case 'MECH': case 'CIVIL':
+      case 'CSE': case 'CCE': case 'ECE': case 'CSE-QC': case 'CSE-AI': case 'CSE-AIDS':
         return 'bg-blue-50 text-blue-700 border-blue-100';
       default:
         return 'bg-slate-100 text-slate-600 border-slate-200';
@@ -598,7 +381,7 @@ export default function HubPage() {
 
           {isLoggedIn && user ? (
             <div className="relative flex items-center space-x-2" ref={dropdownRef}>
-                           {/* Admin shield badge — beside the avatar, clickable */}
+              {/* Admin shield badge — beside the avatar, clickable */}
               {isAdmin(user) && (
                 <button
                   onClick={() => {
