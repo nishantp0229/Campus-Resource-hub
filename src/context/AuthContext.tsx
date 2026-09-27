@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   ReactNode,
 } from 'react';
 
@@ -15,20 +16,23 @@ import {
 export interface UserProfile {
   userName: string;
   userEmail: string;
-  /** URL to avatar image — falls back to generated initials avatar */
   avatarUrl: string | null;
 }
 
 interface AuthContextValue {
   isLoggedIn: boolean;
   user: UserProfile | null;
-  /** Simulates signing in — replace body with real Supabase call */
   login: (email?: string, name?: string) => void;
-  /** Simulates signing out */
   logout: () => void;
-  /** Simulate switching to a different mock account */
   switchAccount: () => void;
 }
+
+// ---------------------------------------------------------------------------
+// LocalStorage keys
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY_USER = 'campus_user';
+const STORAGE_KEY_ACCOUNT_INDEX = 'campus_account_index';
 
 // ---------------------------------------------------------------------------
 // Defaults
@@ -48,39 +52,57 @@ const MOCK_ACCOUNTS: UserProfile[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Helpers — safe localStorage access (SSR-safe)
+// ---------------------------------------------------------------------------
+
+function readStoredUser(): UserProfile | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_USER);
+    return raw ? (JSON.parse(raw) as UserProfile) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredIndex(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ACCOUNT_INDEX);
+    return raw ? Number(raw) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [accountIndex, setAccountIndex] = useState(0);
+  // Initialize from localStorage so session survives refresh
+  const [user, setUser] = useState<UserProfile | null>(() => readStoredUser());
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => readStoredUser() !== null);
+  const [accountIndex, setAccountIndex] = useState<number>(() => readStoredIndex());
+
+  // Keep localStorage in sync with state
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (user) {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_USER);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(STORAGE_KEY_ACCOUNT_INDEX, String(accountIndex));
+  }, [accountIndex]);
 
   const login = useCallback((email?: string, name?: string) => {
-    // -----------------------------------------------------------------------
-    // FUTURE: Replace with Supabase authentication
-    //
-    // import { supabase } from '@/lib/supabase';
-    //
-    // Sign In:
-    //   const { data, error } = await supabase.auth.signInWithPassword({
-    //     email,
-    //     password,
-    //   });
-    //   if (error) throw error;
-    //   setUser({ userName: data.user.user_metadata.full_name, ... });
-    //
-    // Sign Up:
-    //   const { data, error } = await supabase.auth.signUp({
-    //     email,
-    //     password,
-    //     options: { data: { full_name: name } },
-    //   });
-    //   if (error) throw error;
-    // -----------------------------------------------------------------------
-
     const profile = email
       ? { userName: name ?? email.split('@')[0], userEmail: email, avatarUrl: null }
       : MOCK_ACCOUNTS[0];
@@ -90,9 +112,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    // FUTURE: await supabase.auth.signOut();
     setUser(null);
     setIsLoggedIn(false);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY_USER);
+    }
   }, []);
 
   const switchAccount = useCallback(() => {

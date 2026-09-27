@@ -116,6 +116,12 @@ export default function HubPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Hydration guard — only render auth-dependent UI after mount
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Dropdown ref for click-outside
   const dropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -164,6 +170,7 @@ export default function HubPage() {
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
+
   const handleVote = async (id: string, direction: 'up' | 'down') => {
     const currentVote = userVotes[id];
     const resource = resources.find((r) => r.id === id);
@@ -222,6 +229,7 @@ export default function HubPage() {
       alert('Failed to save vote. Please try again.');
     }
   };
+
   /** Guard: upload button requires login */
   const handleUploadClick = () => {
     if (!isLoggedIn) {
@@ -418,101 +426,103 @@ export default function HubPage() {
             <span>Upload Resource</span>
           </button>
 
-          {isLoggedIn && user ? (
-            <div className="relative flex items-center space-x-2" ref={dropdownRef}>
-              {/* Admin shield badge — beside the avatar, clickable */}
-              {isAdmin(user) && (
+          {mounted && (
+            isLoggedIn && user ? (
+              <div className="relative flex items-center space-x-2" ref={dropdownRef}>
+                {/* Admin shield badge — beside the avatar, clickable */}
+                {isAdmin(user) && (
+                  <button
+                    onClick={() => {
+                      setIsAvatarDropdownOpen(false);
+                      router.push('/admin');
+                    }}
+                    className="flex items-center justify-center w-7 h-7 rounded-full bg-red-100 border border-red-300 shadow-xs hover:bg-red-200 hover:border-red-400 hover:scale-110 transition cursor-pointer"
+                    title="Open Admin Panel"
+                    aria-label="Open Admin Panel"
+                  >
+                    <ShieldAlert className="w-4 h-4 text-red-600" strokeWidth={2} />
+                  </button>
+                )}
                 <button
-                  onClick={() => {
-                    setIsAvatarDropdownOpen(false);
-                    router.push('/admin');
-                  }}
-                  className="flex items-center justify-center w-7 h-7 rounded-full bg-red-100 border border-red-300 shadow-xs hover:bg-red-200 hover:border-red-400 hover:scale-110 transition cursor-pointer"
-                  title="Open Admin Panel"
-                  aria-label="Open Admin Panel"
+                  id="avatar-btn"
+                  onClick={() => setIsAvatarDropdownOpen((o) => !o)}
+                  className="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 hover:opacity-90 transition"
+                  aria-label="Account menu"
                 >
-                  <ShieldAlert className="w-4 h-4 text-red-600" strokeWidth={2} />
+                  <AvatarInitials name={user.userName} />
                 </button>
-              )}
-              <button
-                id="avatar-btn"
-                onClick={() => setIsAvatarDropdownOpen((o) => !o)}
-                className="rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 hover:opacity-90 transition"
-                aria-label="Account menu"
-              >
-                <AvatarInitials name={user.userName} />
-              </button>
 
-              {isAvatarDropdownOpen && (
-                <div className="absolute right-0 top-10 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-slate-100">
-                    <p className="text-xs font-semibold text-slate-800 truncate">
-                      {user.userName}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate mt-0.5">
-                      {user.userEmail}
-                    </p>
-                  </div>
+                {isAvatarDropdownOpen && (
+                  <div className="absolute right-0 top-10 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100">
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        {user.userName}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">
+                        {user.userEmail}
+                      </p>
+                    </div>
 
-                  <div className="py-1">
-                    <button
-                      onClick={() => { setShowBookmarkedOnly(true); setIsAvatarDropdownOpen(false); }}
-                      className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition text-left"
-                    >
-                      <Star className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                      <span>My Favorites</span>
-                      <span className="ml-auto text-xs text-slate-400">{bookmarkedIds.length}</span>
-                    </button>
-                    <button
-                      onClick={() => { handleUploadClick(); setIsAvatarDropdownOpen(false); }}
-                      className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition text-left"
-                    >
-                      <Upload className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                      <span>My Uploads</span>
-                    </button>
-
-                    {isAdmin(user) && (
+                    <div className="py-1">
                       <button
-                        onClick={() => {
-                          setIsAvatarDropdownOpen(false);
-                          router.push('/admin');
-                        }}
-                        className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition text-left"
+                        onClick={() => { setShowBookmarkedOnly(true); setIsAvatarDropdownOpen(false); }}
+                        className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition text-left"
                       >
-                        <ShieldAlert className="w-3.5 h-3.5" strokeWidth={1.5} />
-                        <span>Admin Panel</span>
+                        <Star className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
+                        <span>My Favorites</span>
+                        <span className="ml-auto text-xs text-slate-400">{bookmarkedIds.length}</span>
                       </button>
-                    )}
+                      <button
+                        onClick={() => { handleUploadClick(); setIsAvatarDropdownOpen(false); }}
+                        className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition text-left"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
+                        <span>My Uploads</span>
+                      </button>
 
-                    <button
-                      onClick={handleSwitchAccount}
-                      className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition text-left"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
-                      <span>Switch Account</span>
-                    </button>
-                  </div>
+                      {isAdmin(user) && (
+                        <button
+                          onClick={() => {
+                            setIsAvatarDropdownOpen(false);
+                            router.push('/admin');
+                          }}
+                          className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition text-left"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" strokeWidth={1.5} />
+                          <span>Admin Panel</span>
+                        </button>
+                      )}
 
-                  <div className="border-t border-slate-100 py-1">
-                    <button
-                      onClick={handleSignOut}
-                      className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-red-600 hover:bg-red-50 transition text-left"
-                    >
-                      <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
-                      <span>Sign Out</span>
-                    </button>
+                      <button
+                        onClick={handleSwitchAccount}
+                        className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 transition text-left"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.5} />
+                        <span>Switch Account</span>
+                      </button>
+                    </div>
+
+                    <div className="border-t border-slate-100 py-1">
+                      <button
+                        onClick={handleSignOut}
+                        className="w-full flex items-center space-x-2.5 px-4 py-2 text-xs text-red-600 hover:bg-red-50 transition text-left"
+                      >
+                        <LogOut className="w-3.5 h-3.5" strokeWidth={1.5} />
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsAuthModalOpen(true)}
-              className="flex items-center space-x-1.5 text-xs font-medium text-slate-700 border border-slate-200 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition"
-            >
-              <User className="w-3.5 h-3.5" strokeWidth={1.5} />
-              <span>Sign In</span>
-            </button>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="flex items-center space-x-1.5 text-xs font-medium text-slate-700 border border-slate-200 hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition"
+              >
+                <User className="w-3.5 h-3.5" strokeWidth={1.5} />
+                <span>Sign In</span>
+              </button>
+            )
           )}
         </div>
       </header>
