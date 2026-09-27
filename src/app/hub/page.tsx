@@ -164,25 +164,64 @@ export default function HubPage() {
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
-
-  const handleVote = (id: string, direction: 'up' | 'down') => {
+  const handleVote = async (id: string, direction: 'up' | 'down') => {
     const currentVote = userVotes[id];
-    let diff = 0;
-    if (currentVote === direction) {
-      diff = direction === 'up' ? -1 : 1;
-      setUserVotes((prev) => { const next = { ...prev }; delete next[id]; return next; });
-    } else if (currentVote) {
-      diff = direction === 'up' ? 2 : -2;
-      setUserVotes((prev) => ({ ...prev, [id]: direction }));
-    } else {
-      diff = direction === 'up' ? 1 : -1;
-      setUserVotes((prev) => ({ ...prev, [id]: direction }));
-    }
-    setResources((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, upvotes: r.upvotes + diff } : r))
-    );
-  };
+    const resource = resources.find((r) => r.id === id);
+    if (!resource) return;
 
+    // Calculate vote diff
+    let diff = 0;
+    let newUserVote: 'up' | 'down' | null = direction;
+
+    if (currentVote === direction) {
+      // User clicked same button → toggle OFF
+      diff = direction === 'up' ? -1 : 1;
+      newUserVote = null;
+    } else if (currentVote) {
+      // User switched from up to down (or down to up)
+      diff = direction === 'up' ? 2 : -2;
+    } else {
+      // First-time vote
+      diff = direction === 'up' ? 1 : -1;
+    }
+
+    const newUpvotes = resource.upvotes + diff;
+    const prevUpvotes = resource.upvotes;
+
+    // 1. Optimistic UI update (instant feedback)
+    setUserVotes((prev) => {
+      const next = { ...prev };
+      if (newUserVote === null) delete next[id];
+      else next[id] = newUserVote;
+      return next;
+    });
+    setResources((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, upvotes: newUpvotes } : r))
+    );
+
+    // 2. Persist to Supabase
+    try {
+      const { error } = await supabase
+        .from('resources')
+        .update({ upvotes: newUpvotes })
+        .eq('id', id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('[Vote] Failed to persist:', err);
+      // 3. Revert on failure
+      setUserVotes((prev) => {
+        const next = { ...prev };
+        if (currentVote === undefined) delete next[id];
+        else next[id] = currentVote;
+        return next;
+      });
+      setResources((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, upvotes: prevUpvotes } : r))
+      );
+      alert('Failed to save vote. Please try again.');
+    }
+  };
   /** Guard: upload button requires login */
   const handleUploadClick = () => {
     if (!isLoggedIn) {
